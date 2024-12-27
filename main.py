@@ -13,7 +13,9 @@ urllib.request.urlretrieve(variablesurl, 'variables.txt')
 with open('variables.txt') as file:
     lines = file.readlines()
     modpackurl = lines[0].strip()
-
+    javaURL = lines[1].strip()
+    modLoader = lines[2].strip()
+    modpackVersion = lines[3].strip()
 
 # Get latest version
 latest_version = minecraft_launcher_lib.utils.get_latest_version()["release"]
@@ -78,6 +80,14 @@ def install_minecraft(version, directory, callback, progress_window):
     finally:
         progress_window.destroy()
 
+def installFabric():
+    version = "fabric-loader-0.12.12"
+    directory = modpackfolder
+    try:
+        subprocess.run(minecraft_launcher_lib.fabric.install_fabric_loader(version, directory))
+    except Exception as e:
+        tkinter.messagebox.showerror("Error", f"An error occurred during Fabric installation: {str(e)}")
+
 def playmc(version, directory, user):
     new_options = {
     'username': user,  # Default username
@@ -103,18 +113,13 @@ def modpackdownloadpopup():
     if not os.path.exists(modpackfolder):
         os.makedirs(modpackfolder)
     urllib.request.urlretrieve(modpackurl, tempmodpackfile)    
-    mrpack_information = minecraft_launcher_lib.mrpack.get_mrpack_information(tempmodpackfile)
-
     popupmodpack = tkinter.Toplevel()
     popupmodpack.title("Download Modpack")
     popupmodpack.geometry('400x200')
     popupmodpack.resizable(1,1)
     popupmodpacklabel = tkinter.Label(
     popupmodpack, 
-    text="You have selected the following Pack:\n"
-         "Name: " + mrpack_information["name"] + "\n"
-         "Minecraft version: " + mrpack_information["minecraftVersion"]
-    )
+    text="You Sure?")
     popupmodpacklabel.pack(pady=10)
     
     button_frame = tk.Frame(popupmodpack) 
@@ -125,14 +130,13 @@ def modpackdownloadpopup():
     cancel_button.pack(side='right', padx=10)
 
 def modpackplay(user, xmx=4, xms=8) :
-    modpackversion = minecraft_launcher_lib.mrpack.get_mrpack_launch_version(modpackfile)
     new_options = {
     'username': user,  # Default username
     'uuid': 'offline-mode-uuid',  # Placeholder UUID
     'token': 'offline-mode-token',  # Placeholder token
     'jvmArguments': ['-Xmx8G', '-Xms4G'], #Ram 
     }
-    subprocess.run(minecraft_launcher_lib.command.get_minecraft_command(modpackversion, modpackfolder, new_options))
+    subprocess.run(minecraft_launcher_lib.command.get_minecraft_command(modpackVersion, modpackfolder, new_options))
     
 
 root = tkinter.Tk()
