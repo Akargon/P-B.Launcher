@@ -99,7 +99,7 @@ def modpackdownload(popupmodpack) :
     
 
 def modpackdownloadpopup():
-    tempmodpackfile = modpackfolder + '\\modpack.mrpack'
+    tempmodpackfile = modpackfolder + '\\tempmodpack.mrpack'
     if not os.path.exists(modpackfolder):
         os.makedirs(modpackfolder)
     urllib.request.urlretrieve(modpackurl, tempmodpackfile)    
@@ -152,17 +152,19 @@ versioncombobox['values'] = versionlist
 versioncombobox.set(latest_version)
 versioncombobox.pack(pady=10)
 
-updatebutton = tkinter.Button(root, text="Update", command=lambda:updatemc(versioncombobox.get(), default_minecraft_directory))
-updatebutton.pack(pady=10)
+vanilla_frame = ttk.Frame(root)
+vanilla_frame.pack(pady=10)
+updatebutton = tkinter.Button(vanilla_frame, text="Update", command=lambda:updatemc(versioncombobox.get(), default_minecraft_directory))
+updatebutton.pack(side='left', padx=10)
+playbutton = tkinter.Button(vanilla_frame, text="Play", command=lambda:playmc(versioncombobox.get(), default_minecraft_directory, usernameinput.get()))
+playbutton.pack(side='right', padx=10)
 
-playbutton = tkinter.Button(root, text="Play", command=lambda:playmc(versioncombobox.get(), default_minecraft_directory, usernameinput.get()))
-playbutton.pack(pady=10)
-
-ModpackInstallButton =tk.Button(root, text="Modpack Install", command=lambda:modpackdownloadpopup())
-ModpackInstallButton.pack(pady=10)
-
-ModpackPlayButton =tk.Button(root, text="Modpack Play", command=lambda:modpackplay(usernameinput.get()))
-ModpackPlayButton.pack(pady=10)
+modpack_frame = ttk.Frame(root)
+modpack_frame.pack(pady=10)
+ModpackInstallButton =tk.Button(modpack_frame, text="Modpack Install", command=lambda:modpackdownloadpopup())
+ModpackInstallButton.pack(side='left', padx=10)
+ModpackPlayButton =tk.Button(modpack_frame, text="Modpack Play", command=lambda:modpackplay(usernameinput.get()))
+ModpackPlayButton.pack(side='right', padx=10)
 
 root.protocol("WM_DELETE_WINDOW", lambda: (save_settings(), root.destroy()))
 load_settings()
