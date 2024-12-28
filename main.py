@@ -7,7 +7,7 @@ from threading import Thread
 import urllib.request
 import os, shutil
 import zipfile
-
+import uuid
 variablesurl = "https://www.dropbox.com/scl/fi/xw9igl5r3x3vkm8ihfzog/variables.txt?rlkey=c7yfxyvojnlgmekyv12mlakip&dl=1"
 urllib.request.urlretrieve(variablesurl, 'variables.txt')
 
@@ -82,14 +82,17 @@ def install_minecraft(version, directory, callback, progress_window):
     finally:
         progress_window.destroy()
 
-def playmc(version, directory, user):
-    new_options = {
+def playmc(version, directory, user, xmx=4, xms=2):
+    options = {
     'username': user,  # Default username
-    'uuid': 'offline-mode-uuid',  # Placeholder UUID
-    'token': 'offline-mode-token',  # Placeholder token
-    'jvmArguments': ['-Xmx8G', '-Xms4G'], #Ram 
+    'uuid': '',  # Placeholder UUID
+    'token': '',  # Placeholder token
+    'jvmArguments': [f'-Xmx{xmx}G', f'-Xms{xms}G'], #Ram 
+    "disableMultiplayer": False, # Disables the multiplayer    
+    "launcherName": "P-beLauncher", # The name of your launcher
+    "launcherVersion": "1.0", # The version of your launcher
     }
-    subprocess.run(minecraft_launcher_lib.command.get_minecraft_command(version, directory, new_options))
+    subprocess.run(minecraft_launcher_lib.command.get_minecraft_command(version, directory, options))
 
 
 def installFabric():
@@ -104,6 +107,9 @@ def installForge():
 def modpackdownload(popupmodpack) :
     if not os.path.exists(modpackFolder):
         os.makedirs(modpackFolder)
+    if os.path.exists(modsPath):
+        shutil.rmtree(modsPath)
+        os.makedirs(modsPath) 
     minecraft_launcher_lib.install.install_minecraft_version(vanillaModpackVersion, modpackFolder)
     urllib.request.urlretrieve(modpackurl, modpackFile)
     with zipfile.ZipFile(modpackFile, 'r') as zip_ref: # Extract all the contents 
@@ -139,13 +145,17 @@ def modpackdownloadpopup():
     cancel_button.pack(side='right', padx=10)
 
 def modpackplay(user, xmx=4, xms=8) :
-    new_options = {
+    binFolder  = modpackFolder + '/bin/*'
+    nativesFolder = modpackFolder + '/bin/natives/'
+    options = {
     'username': user,  # Default username
-    'uuid': 'offline-mode-uuid',  # Placeholder UUID
-    'token': 'offline-mode-token',  # Placeholder token
-    'jvmArguments': ['-Xmx8G', '-Xms4G'], #Ram 
+    'uuid': 'offline-uuid',  # Placeholder UUID
+    'token': 'offline-token',  # Placeholder token
+    'jvmArguments': ['-Xmx'+xmx+'G', '-Xms4'+xms+'G'], #Ram 
+    "demo" : True
     }
-    subprocess.run(minecraft_launcher_lib.command.get_minecraft_command(modpackVersion, modpackFolder, new_options))
+    subprocess.run(minecraft_launcher_lib.command.get_minecraft_command(modpackVersion, modpackFolder, options))
+    root.destroy()
     
 
 root = tkinter.Tk()
