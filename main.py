@@ -6,6 +6,7 @@ import subprocess
 from threading import Thread
 import urllib.request
 import os, shutil
+import zipfile
 
 variablesurl = "https://www.dropbox.com/scl/fi/xw9igl5r3x3vkm8ihfzog/variables.txt?rlkey=c7yfxyvojnlgmekyv12mlakip&dl=1"
 urllib.request.urlretrieve(variablesurl, 'variables.txt')
@@ -13,18 +14,19 @@ urllib.request.urlretrieve(variablesurl, 'variables.txt')
 with open('variables.txt') as file:
     lines = file.readlines()
     modpackurl = lines[0].strip()
-    javaURL = lines[1].strip()
-    modLoader = lines[2].strip()
-    modpackVersion = lines[3].strip()
+    modLoader = lines[1].strip()
+    modpackVersion = lines[2].strip()
+    vanillaModpackVersion = lines[3].strip()
 
 # Get latest version
 latest_version = minecraft_launcher_lib.utils.get_latest_version()["release"]
 
 # Get Minecraft directory
 default_minecraft_directory = minecraft_launcher_lib.utils.get_minecraft_directory()
-modpackfolder = default_minecraft_directory + 'Pibes'
-modpackfile = modpackfolder + '\\modpack.mrpack'
-
+modpackFolder = default_minecraft_directory + 'Pibes'
+modpackFile = modpackFolder + '\\modpack.zip'
+modsPath = modpackFolder + "\\mods"
+java = modpackFolder + "\\runtime\\bin\\java.exe"
 #minecraft_command = minecraft_launcher_lib.command.get_minecraft_command(latest_version, default_minecraft_directory, default_options)
 versionlist = [version['id'] for version in minecraft_launcher_lib.utils.get_available_versions(default_minecraft_directory) if version['type'] == "release"]
 
@@ -80,14 +82,6 @@ def install_minecraft(version, directory, callback, progress_window):
     finally:
         progress_window.destroy()
 
-def installFabric():
-    version = "fabric-loader-0.12.12"
-    directory = modpackfolder
-    try:
-        subprocess.run(minecraft_launcher_lib.fabric.install_fabric_loader(version, directory))
-    except Exception as e:
-        tkinter.messagebox.showerror("Error", f"An error occurred during Fabric installation: {str(e)}")
-
 def playmc(version, directory, user):
     new_options = {
     'username': user,  # Default username
@@ -97,22 +91,37 @@ def playmc(version, directory, user):
     }
     subprocess.run(minecraft_launcher_lib.command.get_minecraft_command(version, directory, new_options))
 
-def modpackdownload(popupmodpack) :
-    modspath = modpackfolder + "\\mods"
-    shutil.rmtree(modspath)
-    urllib.request.urlretrieve(modpackurl, modpackfile)
+
+def installFabric():
+    version = "fabric-loader-0.12.12"
     try:
-        minecraft_launcher_lib.mrpack.install_mrpack(modpackfile, modpackfolder)
+        subprocess.run(minecraft_launcher_lib.fabric.install_fabric_loader(version, modpackFolder))
     except Exception as e:
-        tkinter.messagebox.showerror("Error", f"An error occurred during modpack installation: {str(e)}")
+        tkinter.messagebox.showerror("Error", f"An error occurred during Fabric installation: {str(e)}")
+
+def installForge():
+    subprocess.run(java + " -jar " + modpackFolder + "\\forge.jar --installClient " + modpackFolder)
+def modpackdownload(popupmodpack) :
+    if not os.path.exists(modpackFolder):
+        os.makedirs(modpackFolder)
+    minecraft_launcher_lib.install.install_minecraft_version(vanillaModpackVersion, modpackFolder)
+    urllib.request.urlretrieve(modpackurl, modpackFile)
+    with zipfile.ZipFile(modpackFile, 'r') as zip_ref: # Extract all the contents 
+        zip_ref.extractall(modpackFolder)
+    if  modLoader == 'Fabric' :
+        installFabric()
+    elif modLoader == 'Forge' :
+        # Forge installation goes here
+        installForge()
+    elif modLoader == 'NeoForge' :
+        # NeoForge installation goes here
+        pass
+    else :
+        tkinter.messagebox.showerror("Error", f"An rror occurred during installation: Modloader not found")
     popupmodpack.destroy()  # Close the popup after the download starts    
     
 
-def modpackdownloadpopup():
-    tempmodpackfile = modpackfolder + '\\tempmodpack.mrpack'
-    if not os.path.exists(modpackfolder):
-        os.makedirs(modpackfolder)
-    urllib.request.urlretrieve(modpackurl, tempmodpackfile)    
+def modpackdownloadpopup():   
     popupmodpack = tkinter.Toplevel()
     popupmodpack.title("Download Modpack")
     popupmodpack.geometry('400x200')
@@ -136,7 +145,7 @@ def modpackplay(user, xmx=4, xms=8) :
     'token': 'offline-mode-token',  # Placeholder token
     'jvmArguments': ['-Xmx8G', '-Xms4G'], #Ram 
     }
-    subprocess.run(minecraft_launcher_lib.command.get_minecraft_command(modpackVersion, modpackfolder, new_options))
+    subprocess.run(minecraft_launcher_lib.command.get_minecraft_command(modpackVersion, modpackFolder, new_options))
     
 
 root = tkinter.Tk()
