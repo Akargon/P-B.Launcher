@@ -17,6 +17,7 @@ with open('variables.txt') as file:
     modLoader = lines[1].strip()
     modpackVersion = lines[2].strip()
     vanillaModpackVersion = lines[3].strip()
+    fabricVersion = lines[4].strip()
 
 # Get latest version
 latest_version = minecraft_launcher_lib.utils.get_latest_version()["release"]
@@ -27,10 +28,9 @@ modpackFolder = default_minecraft_directory + 'Pibes'
 modpackFile = modpackFolder + '\\modpack.zip'
 modsPath = modpackFolder + "\\mods"
 java = modpackFolder + "\\runtime\\bin\\java.exe"
-#minecraft_command = minecraft_launcher_lib.command.get_minecraft_command(latest_version, default_minecraft_directory, default_options)
-versionlist = [version['id'] for version in minecraft_launcher_lib.utils.get_available_versions(default_minecraft_directory) if version['type'] == "release"]
-
+versionlist = [version['id'] for version in minecraft_launcher_lib.utils.get_version_list() if version['type'] == "release"]
 settings_file = 'launcher_settings.txt' 
+
 def save_settings(): 
     with open(settings_file, 'w') as file: 
         file.write(f"{usernameinput.get()}\n") 
@@ -48,33 +48,8 @@ def maximum(max_value, value):
     max_value[0] = value
     
 def updatemc(version, directory):
-
-    progress_window = tk.Toplevel(root)
-    progress_window.title("Updating...")
-    progress_window.geometry('300x100')
-    progress_window.resizable(0,0)
-
-    progresstext = tk.StringVar()
-    progress = tk.IntVar()
-    progress_text = tk.Label(progress_window, textvariable=progresstext)
-    progress_text.pack(pady=10)
-    progress_bar = ttk.Progressbar(progress_window, variable=progress, length=260,  )
-    progress_bar.place(relx=0.5, rely=0.5, anchor='center')
-    
-    max_value = [0]
-
-    callback = {
-        "setStatus": lambda text: progresstext.set(text),
-        "setProgress": lambda value: progress.set(value),
-        "setMax": lambda value: progress_bar.configure(maximum(max_value, value))
-
-    } 
-    try:
-        # Run the installation in a separate thread to keep the GUI responsive
-        Thread(target=lambda: install_minecraft(version, directory, callback, progress_window)).start()
-        
-    except Exception as e:
-        tkinter.messagebox.showerror("Error", f"An error occurred during installation: {str(e)}")
+    minecraft_launcher_lib.install.install_minecraft_version(version, directory) 
+    tkinter.messagebox.showinfo("Update completed", f"Minecraft {version} has been successfully updated.")
 
 def install_minecraft(version, directory, callback, progress_window):
     try:
@@ -82,13 +57,17 @@ def install_minecraft(version, directory, callback, progress_window):
     finally:
         progress_window.destroy()
 
-def playmc(version, directory, user, xmx=4, xms=2):
+def playmc(version, directory, user, xmx=8, xms=4):
     options = {
     'username': user,  # Default username
     'uuid': '',  # Placeholder UUID
     'token': '',  # Placeholder token
-    'jvmArguments': [f'-Xmx{xmx}G', f'-Xms{xms}G'], #Ram 
-    "disableMultiplayer": False, # Disables the multiplayer    
+    'jvmArguments': [f'-Xmx{xmx}G',  #Ram max memory
+                     f'-Xms{xms}G',  #Ram min memory
+                     '-Dminecraft.api.auth.host=https://nope.invalid', 
+                     '-Dminecraft.api.account.host=https://nope.invalid', 
+                     '-Dminecraft.api.session.host=https://nope.invalid', 
+                     '-Dminecraft.api.services.host=https://nope.invalid'],
     "launcherName": "P-beLauncher", # The name of your launcher
     "launcherVersion": "1.0", # The version of your launcher
     }
@@ -96,32 +75,34 @@ def playmc(version, directory, user, xmx=4, xms=2):
 
 
 def installFabric():
-    version = "fabric-loader-0.12.12"
+    fabric = modpackFolder + "\\fabric.jar"
     try:
-        subprocess.run(minecraft_launcher_lib.fabric.install_fabric_loader(version, modpackFolder))
+        subprocess.run(f'{java} -jar {fabric} client -dir {modpackFolder} -mcversion {vanillaModpackVersion}')
     except Exception as e:
         tkinter.messagebox.showerror("Error", f"An error occurred during Fabric installation: {str(e)}")
 
 def installForge():
-    subprocess.run(java + " -jar " + modpackFolder + "\\forge.jar --installClient " + modpackFolder)
+    forge = modpackFolder + "\\forge.jar"
+    subprocess.run(f'{java} -jar {forge} --installClient {modpackFolder}')
+def installNeoForge():
+    neoforge = modpackFolder + "\\neoforge.jar"
+    subprocess.run(f'{java} -jar {neoforge} --installClient {modpackFolder}')
+
 def modpackdownload(popupmodpack) :
     if not os.path.exists(modpackFolder):
         os.makedirs(modpackFolder)
     if os.path.exists(modsPath):
         shutil.rmtree(modsPath)
         os.makedirs(modsPath) 
-    minecraft_launcher_lib.install.install_minecraft_version(vanillaModpackVersion, modpackFolder)
     urllib.request.urlretrieve(modpackurl, modpackFile)
     with zipfile.ZipFile(modpackFile, 'r') as zip_ref: # Extract all the contents 
         zip_ref.extractall(modpackFolder)
     if  modLoader == 'Fabric' :
         installFabric()
     elif modLoader == 'Forge' :
-        # Forge installation goes here
         installForge()
     elif modLoader == 'NeoForge' :
-        # NeoForge installation goes here
-        pass
+        installNeoForge()
     else :
         tkinter.messagebox.showerror("Error", f"An rror occurred during installation: Modloader not found")
     popupmodpack.destroy()  # Close the popup after the download starts    
@@ -144,18 +125,19 @@ def modpackdownloadpopup():
     cancel_button = tkinter.Button(button_frame, text="Cancel", command=lambda: popupmodpack.destroy())
     cancel_button.pack(side='right', padx=10)
 
-def modpackplay(user, xmx=4, xms=8) :
-    binFolder  = modpackFolder + '/bin/*'
-    nativesFolder = modpackFolder + '/bin/natives/'
+def modpackplay(user, xmx=8, xms=4) :
     options = {
     'username': user,  # Default username
     'uuid': 'offline-uuid',  # Placeholder UUID
     'token': 'offline-token',  # Placeholder token
-    'jvmArguments': ['-Xmx'+xmx+'G', '-Xms4'+xms+'G'], #Ram 
-    "demo" : True
+    'jvmArguments': [f'-Xmx{xmx}G',  #Ram max memory
+                 f'-Xms{xms}G',  #Ram min memory
+                 '-Dminecraft.api.auth.host=https://nope.invalid', 
+                 '-Dminecraft.api.account.host=https://nope.invalid', 
+                 '-Dminecraft.api.session.host=https://nope.invalid', 
+                 '-Dminecraft.api.services.host=https://nope.invalid'],
     }
     subprocess.run(minecraft_launcher_lib.command.get_minecraft_command(modpackVersion, modpackFolder, options))
-    root.destroy()
     
 
 root = tkinter.Tk()
@@ -163,17 +145,20 @@ root.title("PibeLauncher")
 root.geometry('500x500')
 root.resizable(1,1)
 
-username_label = tkinter.Label(root, text="Username:")
-username_label.pack()
-usernameinput = tkinter.Entry(root)
-usernameinput.pack(pady=10)
+frame = ttk.Frame(root)
+frame.pack(pady = 10)
+username_label = tkinter.Label(frame, text="Username:")
+username_label.pack(side='left', padx=10)
+usernameinput = tkinter.Entry(frame)
+usernameinput.pack(side='left', padx=10)
 
-version_label = tkinter.Label(root, text="Version:")
-version_label.pack()
-versioncombobox = ttk.Combobox(root, width=17)
+versioncombobox = ttk.Combobox(frame, width=17)
 versioncombobox['values'] = versionlist
 versioncombobox.set(latest_version)
-versioncombobox.pack(pady=10)
+versioncombobox.pack(side='right', padx=10)
+version_label = tkinter.Label(frame, text="Version:")
+version_label.pack(side='right', padx=10)
+
 
 vanilla_frame = ttk.Frame(root)
 vanilla_frame.pack(pady=10)
