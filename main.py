@@ -5,9 +5,21 @@ import minecraft_launcher_lib
 import subprocess
 from threading import Thread
 import urllib.request
-import os, shutil
+import os, shutil, sys
 import zipfile
 import psutil
+
+
+# Function to handle resource paths
+def resource_path(relative_path):
+    """ Get the absolute path to a resource, works for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 # Get Minecraft directory
 default_minecraft_directory = minecraft_launcher_lib.utils.get_minecraft_directory()
@@ -65,7 +77,9 @@ def playmc(version, directory, user, xmx):
                          '-Dminecraft.api.session.host=https://nope.invalid',
                          '-Dminecraft.api.services.host=https://nope.invalid'],
     }
+
     installedVersionList = [version['id'] for version in minecraft_launcher_lib.utils.get_installed_versions(vanillaFolder)]
+
     if version in installedVersionList :
         print(f'Running minecraft {version}')
         subprocess.run(minecraft_launcher_lib.command.get_minecraft_command(version, directory, options))
@@ -89,6 +103,7 @@ def installNeoForge():
     subprocess.run(f'{java} -jar {neoforge} --installClient {modpackFolder}')
 
 def modpackdownload(popupmodpack) :
+    installedVersionList = [version['id'] for version in minecraft_launcher_lib.utils.get_installed_versions(modpackFolder)]
     if not os.path.exists(modpackFolder):
         os.makedirs(modpackFolder)
     if os.path.exists(modsPath):
@@ -97,6 +112,8 @@ def modpackdownload(popupmodpack) :
     urllib.request.urlretrieve(modpackurl, modpackFile)
     with zipfile.ZipFile(modpackFile, 'r') as zip_ref: # Extract all the contents 
         zip_ref.extractall(modpackFolder)
+    if not vanillaModpackVersion in installedVersionList :
+        updatemc(vanillaModpackVersion, modpackFolder)
     if  modLoader == 'Fabric' :
         installFabric()
     elif modLoader == 'Forge' :
@@ -136,7 +153,6 @@ def modpackplay(user, xmx) :
                          '-Dminecraft.api.services.host=https://nope.invalid'],
     }
     subprocess.run(minecraft_launcher_lib.command.get_minecraft_command(modpackVersion, modpackFolder, options))
-
 def update_versions(*args): 
     if seeInstalledVersionsVar.get(): 
         installedVersionList = [version['id'] for version in minecraft_launcher_lib.utils.get_installed_versions(vanillaFolder)] 
@@ -145,15 +161,14 @@ def update_versions(*args):
         versioncombobox['values'] = versionlist 
         versioncombobox.set(latest_version)
 
-
-
 root = tk.Tk()
 root.title("PibeLauncher")
 root.geometry('500x200')
 root.resizable(1,1)
 
-icon_image = tk.PhotoImage(file='assets\\icon.png')
-root.iconphoto(False, icon_image)
+
+icon_image = tk.PhotoImage(file=resource_path('assets\\icon.png'))
+root.iconphoto(True, icon_image)
 
 frame = ttk.Frame(root)
 frame.pack(pady = 10)
@@ -163,7 +178,7 @@ usernameinput = tkinter.Entry(frame)
 usernameinput.pack(side='left', padx=10)
 
 seeInstalledVersionsVar = tkinter.BooleanVar()
-seeInstalledVersionsVar.set(True)
+seeInstalledVersionsVar.set(False)
 seeInstalledVersions = tkinter.Checkbutton(frame, text='Installed Versions', variable=seeInstalledVersionsVar)
 seeInstalledVersions.pack(side='right', padx=10)
 seeInstalledVersionsVar.trace_add('write', update_versions)
@@ -174,19 +189,11 @@ versioncombobox.pack(side='right', padx=10)
 version_label = tkinter.Label(frame, text="Version:")
 version_label.pack(side='right', padx=10)
 
-#ramFrame = ttk.Frame(root)
-#ramFrame.pack(pady=10)
-#ramLabel = tkinter.Label(ramFrame, text="Max RAM:")
-#ramLabel.pack(side='left', padx=10)
 maxRamSlide = tk.Scale(root, from_=2024, to=availableRAM / (1024 ** 2), orient='horizontal', length=200, showvalue=True, label='Max RAM')
 maxRamSlide.pack(pady=10)
 
-
 buttonsFrame = ttk.Frame(root)
 buttonsFrame.pack(pady=10)
-#updatebutton = tkinter.Button(buttonsFrame, text="Update", command=lambda:updatemc(versioncombobox.get(), vanillaFolder))
-#updatebutton.pack(side='left', padx=10)
-
 ModpackInstallButton =tk.Button(buttonsFrame, text="Modpack Install", command=lambda:modpackdownloadpopup())
 ModpackInstallButton.pack(side='left', padx=10)
 ModpackPlayButton =tk.Button(buttonsFrame, text="Modpack Play", command=lambda:modpackplay(usernameinput.get(), maxRamSlide.get()))
@@ -198,4 +205,3 @@ root.protocol("WM_DELETE_WINDOW", lambda: (save_settings(), root.destroy()))
 load_settings()
 update_versions()
 root.mainloop()
-
