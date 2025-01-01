@@ -7,7 +7,7 @@
   },
   {
    "optionDest": "filenames",
-   "value": "C:/Users/Nahuel/Desktop/P-beLauncher/main.py"
+   "value": "C:/Users/Nahuel/Desktop/P-B.Launcher/main.py"
   },
   {
    "optionDest": "onefile",
@@ -19,7 +19,7 @@
   },
   {
    "optionDest": "icon_file",
-   "value": "C:/Users/Nahuel/Desktop/P-beLauncher/assets/icon.ico"
+   "value": "C:/Users/Nahuel/Desktop/P-B.Launcher/assets/icon.ico"
   },
   {
    "optionDest": "name",
@@ -59,7 +59,7 @@
   },
   {
    "optionDest": "datas",
-   "value": "C:/Users/Nahuel/Desktop/P-beLauncher/assets;assets/"
+   "value": "C:/Users/Nahuel/Desktop/P-B.Launcher/assets;assets/"
   }
  ],
  "nonPyinstallerOptions": {

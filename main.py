@@ -48,6 +48,8 @@ with open(variables_file) as file:
     fabricVersion = lines[4].strip()
 
 def save_settings(): 
+    if not os.path.exists(launcherFolder):
+        os.makedirs(launcherFolder)
     with open(settings_file, 'w') as file: 
         file.write(f"{usernameinput.get()}\n") 
         file.write(f"{versioncombobox.get()}\n") 
@@ -77,24 +79,30 @@ def playmc(version, directory, user, xmx):
                          '-Dminecraft.api.session.host=https://nope.invalid',
                          '-Dminecraft.api.services.host=https://nope.invalid'],
     }
-
+ 
     installedVersionList = [version['id'] for version in minecraft_launcher_lib.utils.get_installed_versions(vanillaFolder)]
-
     if version in installedVersionList :
         print(f'Running minecraft {version}')
-        subprocess.run(minecraft_launcher_lib.command.get_minecraft_command(version, directory, options))
     else :
         print(f'Minecraft {version} not installed, downloading now')
         updatemc(version, directory)
         subprocess.run(minecraft_launcher_lib.command.get_minecraft_command(version, directory, options))
+
+    original_dir = os.getcwd()
+    os.chdir(vanillaFolder)
+    try:
+        subprocess.run(
+            minecraft_launcher_lib.command.get_minecraft_command(version, directory, options),
+            cwd=vanillaFolder
+        )
+    finally:
+        # Change back to the original directory
+        os.chdir(original_dir)
             
 def installFabric():
     fabric = modpackFolder + "\\fabric.jar"
-    try:
-        subprocess.run(f'{java} -jar {fabric} client -dir {modpackFolder} -mcversion {vanillaModpackVersion}')
-    except Exception as e:
-        tkinter.messagebox.showerror("Error", f"An error occurred during Fabric installation: {str(e)}")
-
+    minecraft_launcher_lib.fabric.install_fabric(vanillaModpackVersion, modpackFolder, fabricVersion)
+    
 def installForge():
     forge = modpackFolder + "\\forge.jar"
     subprocess.run(f'{java} -jar {forge} --installClient {modpackFolder}')
@@ -104,11 +112,11 @@ def installNeoForge():
 
 def modpackdownload(popupmodpack) :
     installedVersionList = [version['id'] for version in minecraft_launcher_lib.utils.get_installed_versions(modpackFolder)]
-    if not os.path.exists(modpackFolder):
+    if os.path.exists(modpackFolder):
+        shutil.rmtree(modpackFolder)
         os.makedirs(modpackFolder)
-    if os.path.exists(modsPath):
-        shutil.rmtree(modsPath)
-        os.makedirs(modsPath) 
+    else :
+        os.makedirs(modpackFolder)
     urllib.request.urlretrieve(modpackurl, modpackFile)
     with zipfile.ZipFile(modpackFile, 'r') as zip_ref: # Extract all the contents 
         zip_ref.extractall(modpackFolder)
@@ -121,7 +129,7 @@ def modpackdownload(popupmodpack) :
     elif modLoader == 'NeoForge' :
         installNeoForge()
     else :
-        tkinter.messagebox.showerror("Error", f"An rror occurred during installation: Modloader not found")
+        print("Error", f"An rror occurred during installation: Modloader not found")
     popupmodpack.destroy()  # Close the popup after the download starts    
     
 
@@ -152,7 +160,18 @@ def modpackplay(user, xmx) :
                          '-Dminecraft.api.session.host=https://nope.invalid',
                          '-Dminecraft.api.services.host=https://nope.invalid'],
     }
-    subprocess.run(minecraft_launcher_lib.command.get_minecraft_command(modpackVersion, modpackFolder, options))
+    original_dir = os.getcwd()
+    os.chdir(modpackFolder) 
+    try:
+        subprocess.run(
+            minecraft_launcher_lib.command.get_minecraft_command(modpackVersion, modpackFolder, options),
+            cwd=modpackFolder
+        )
+    finally:
+        # Change back to the original directory
+        os.chdir(original_dir)
+
+
 def update_versions(*args): 
     if seeInstalledVersionsVar.get(): 
         installedVersionList = [version['id'] for version in minecraft_launcher_lib.utils.get_installed_versions(vanillaFolder)] 
