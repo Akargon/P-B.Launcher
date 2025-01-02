@@ -1,6 +1,7 @@
 import tkinter as tk
 import tkinter
 from tkinter import ttk
+import tkinter.messagebox
 import minecraft_launcher_lib
 import subprocess
 from threading import Thread
@@ -8,7 +9,6 @@ import urllib.request
 import os, shutil, sys
 import zipfile
 import psutil
-
 
 # Function to handle resource paths
 def resource_path(relative_path):
@@ -28,7 +28,7 @@ vanillaFolder = launcherFolder + '\\vanilla'
 modpackFolder = launcherFolder + '\\modpack'
 modpackFile = modpackFolder + '\\modpack.zip'
 modsPath = modpackFolder + "\\mods"
-java = modpackFolder + "\\runtime\\bin\\java.exe"
+java = resource_path("runtime\\bin\\java.exe")
 variables_file = launcherFolder + '\\variables.txt'
 settings_file = launcherFolder + '\\launcher_settings.txt' 
 availableRAM = psutil.virtual_memory().total
@@ -63,46 +63,46 @@ def load_settings():
             versioncombobox.set(lines[1].strip())
             maxRamSlide.set(lines[2].strip())
             seeInstalledVersionsVar.set(lines[3].strip())
-
-   
-def updatemc(version, directory):
-    minecraft_launcher_lib.install.install_minecraft_version(version, directory) 
-
-def playmc(version, directory, user, xmx):
-    options = {
-        'username': user,  # Default username
-        'uuid': 'offline-uuid',  # Placeholder UUID
-        'token': 'offline-token',  # Placeholder token
-        'jvmArguments': [f'-Xmx{xmx}m',  # Ram max memory
-                         '-Dminecraft.api.auth.host=https://nope.invalid',
-                         '-Dminecraft.api.account.host=https://nope.invalid',
-                         '-Dminecraft.api.session.host=https://nope.invalid',
-                         '-Dminecraft.api.services.host=https://nope.invalid'],
-    }
- 
-    installedVersionList = [version['id'] for version in minecraft_launcher_lib.utils.get_installed_versions(vanillaFolder)]
-    if version in installedVersionList :
-        print(f'Running minecraft {version}')
-    else :
-        print(f'Minecraft {version} not installed, downloading now')
-        updatemc(version, directory)
-        subprocess.run(minecraft_launcher_lib.command.get_minecraft_command(version, directory, options))
-
-    original_dir = os.getcwd()
-    os.chdir(vanillaFolder)
-    try:
-        subprocess.run(
-            minecraft_launcher_lib.command.get_minecraft_command(version, directory, options),
-            cwd=vanillaFolder
-        )
-    finally:
-        # Change back to the original directory
-        os.chdir(original_dir)
             
-def installFabric():
-    fabric = modpackFolder + "\\fabric.jar"
-    minecraft_launcher_lib.fabric.install_fabric(vanillaModpackVersion, modpackFolder, fabricVersion)
+def playmc(version, directory, user, xmx, isModpack = False):
+    # Check if Minecraft is already running
+    for proc in psutil.process_iter(['pid', 'name']):
+        if 'java' in proc.info['name']:
+            if tkinter.messagebox.askyesnocancel(title = 'Minecraft is already running', message = 'Do you wish to continue anyway?') : 
+                break
+            else : 
+                return
+        
+    if not isModpack :
+        installedVersionList = [version['id'] for version in minecraft_launcher_lib.utils.get_installed_versions(directory)]
+        if version in installedVersionList:
+            print(f'Running Minecraft {version}')
+        else:
+            print(f'Minecraft {version} not installed, downloading now')
+            minecraft_launcher_lib.install.install_minecraft_version(version, directory)
+
+    def run_minecraft():
+        options = {
+            'username': user,  # Default username
+            'uuid': 'offline-uuid',  # Placeholder UUID
+            'token': 'offline-token',  # Placeholder token
+            'jvmArguments': [f'-Xmx{xmx}m',  # Ram max memory
+                            '-Dminecraft.api.auth.host=https://nope.invalid',
+                            '-Dminecraft.api.account.host=https://nope.invalid',
+                            '-Dminecraft.api.session.host=https://nope.invalid',
+                            '-Dminecraft.api.services.host=https://nope.invalid'],
+        }
+
+        
+        # Launch Minecraft
+        
+        subprocess.run(minecraft_launcher_lib.command.get_minecraft_command(version, directory, options), cwd=directory)
     
+    # Run the run_minecraft function in a separate thread
+    thread = Thread(target=run_minecraft)
+    thread.start()
+
+
 def installForge():
     forge = modpackFolder + "\\forge.jar"
     subprocess.run(f'{java} -jar {forge} --installClient {modpackFolder}')
@@ -111,7 +111,6 @@ def installNeoForge():
     subprocess.run(f'{java} -jar {neoforge} --installClient {modpackFolder}')
 
 def modpackdownload(popupmodpack) :
-    installedVersionList = [version['id'] for version in minecraft_launcher_lib.utils.get_installed_versions(modpackFolder)]
     if os.path.exists(modpackFolder):
         shutil.rmtree(modpackFolder)
         os.makedirs(modpackFolder)
@@ -120,10 +119,9 @@ def modpackdownload(popupmodpack) :
     urllib.request.urlretrieve(modpackurl, modpackFile)
     with zipfile.ZipFile(modpackFile, 'r') as zip_ref: # Extract all the contents 
         zip_ref.extractall(modpackFolder)
-    if not vanillaModpackVersion in installedVersionList :
-        updatemc(vanillaModpackVersion, modpackFolder)
+    minecraft_launcher_lib.install.install_minecraft_version(vanillaModpackVersion, modpackFolder)
     if  modLoader == 'Fabric' :
-        installFabric()
+        minecraft_launcher_lib.fabric.install_fabric(vanillaModpackVersion, modpackFolder, fabricVersion)
     elif modLoader == 'Forge' :
         installForge()
     elif modLoader == 'NeoForge' :
@@ -147,30 +145,6 @@ def modpackdownloadpopup():
     cancel_button.pack(side='left', padx=10)
     download_button = tkinter.Button(button_frame, text="Download", command=lambda: modpackdownload(popupmodpack))
     download_button.pack(side='left', padx=10)
-
-
-def modpackplay(user, xmx) :
-    options = {
-        'username': user,  # Default username
-        'uuid': 'offline-uuid',  # Placeholder UUID
-        'token': 'offline-token',  # Placeholder token
-        'jvmArguments': [f'-Xmx{xmx}m',  # Ram max memory
-                         '-Dminecraft.api.auth.host=https://nope.invalid',
-                         '-Dminecraft.api.account.host=https://nope.invalid',
-                         '-Dminecraft.api.session.host=https://nope.invalid',
-                         '-Dminecraft.api.services.host=https://nope.invalid'],
-    }
-    original_dir = os.getcwd()
-    os.chdir(modpackFolder) 
-    try:
-        subprocess.run(
-            minecraft_launcher_lib.command.get_minecraft_command(modpackVersion, modpackFolder, options),
-            cwd=modpackFolder
-        )
-    finally:
-        # Change back to the original directory
-        os.chdir(original_dir)
-
 
 def update_versions(*args): 
     if seeInstalledVersionsVar.get(): 
@@ -215,12 +189,13 @@ buttonsFrame = ttk.Frame(root)
 buttonsFrame.pack(pady=10)
 ModpackInstallButton =tk.Button(buttonsFrame, text="Modpack Install", command=lambda:modpackdownloadpopup())
 ModpackInstallButton.pack(side='left', padx=10)
-ModpackPlayButton =tk.Button(buttonsFrame, text="Modpack Play", command=lambda:modpackplay(usernameinput.get(), maxRamSlide.get()))
+ModpackPlayButton =tk.Button(buttonsFrame, text="Modpack Play", command=lambda:playmc(modpackVersion, modpackFolder, usernameinput.get(), maxRamSlide.get()))
 ModpackPlayButton.pack(side='left', padx=10)
-playbutton = tkinter.Button(buttonsFrame, text="Play", command=lambda:playmc(versioncombobox.get(), vanillaFolder, usernameinput.get(), maxRamSlide.get()))
+playbutton = tkinter.Button(buttonsFrame, text="Play", command=lambda:playmc(versioncombobox.get(), vanillaFolder, usernameinput.get(), maxRamSlide.get(), True))
 playbutton.pack(side='left', padx=10)
 
 root.protocol("WM_DELETE_WINDOW", lambda: (save_settings(), root.destroy()))
 load_settings()
 update_versions()
+
 root.mainloop()

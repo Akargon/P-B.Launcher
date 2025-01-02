@@ -60,6 +60,10 @@
   {
    "optionDest": "datas",
    "value": "C:/Users/Nahuel/Desktop/P-B.Launcher/assets;assets/"
+  },
+  {
+   "optionDest": "datas",
+   "value": "C:/Users/Nahuel/Desktop/P-B.Launcher/runtime;runtime/"
   }
  ],
  "nonPyinstallerOptions": {

@@ -1,5 +1,6 @@
-
+output
 launcher_settings.txt
 variables.txt
 logs
 auto-py-to-exe.json
+/output
