@@ -4,7 +4,6 @@ from tkinter import ttk
 import tkinter.messagebox
 import minecraft_launcher_lib
 import subprocess
-import threading
 from threading import Thread
 import urllib.request
 import os, shutil, sys
@@ -22,7 +21,6 @@ def resource_path(relative_path):
 
     return os.path.join(base_path, relative_path)
 
-
 # Get Minecraft directory
 default_minecraft_directory = minecraft_launcher_lib.utils.get_minecraft_directory()
 launcherFolder = default_minecraft_directory + 'Pibes'
@@ -30,12 +28,15 @@ vanillaFolder = launcherFolder + '\\vanilla'
 modpackFolder = launcherFolder + '\\modpack'
 modpackFile = modpackFolder + '\\modpack.zip'
 modsPath = modpackFolder + "\\mods"
-java = resource_path("runtime\\bin\\java.exe")
 variables_file = launcherFolder + '\\variables.txt'
 settings_file = launcherFolder + '\\launcher_settings.txt' 
 availableRAM = psutil.virtual_memory().total
 latest_version = minecraft_launcher_lib.utils.get_latest_version()["release"]
 versionlist = [version['id'] for version in minecraft_launcher_lib.utils.get_version_list() if version['type'] == "release"]
+
+if not 'java-runtime-delta' in minecraft_launcher_lib.runtime.get_installed_jvm_runtimes(launcherFolder):
+    minecraft_launcher_lib.runtime.install_jvm_runtime('java-runtime-delta', launcherFolder)
+java = minecraft_launcher_lib.runtime.get_executable_path('java-runtime-delta', launcherFolder)
 
 if not os.path.exists(launcherFolder):
     os.makedirs(launcherFolder)
@@ -53,7 +54,7 @@ def save_settings():
     if not os.path.exists(launcherFolder):
         os.makedirs(launcherFolder)
     with open(settings_file, 'w') as file: 
-        file.write(f"{usernameinput.get()}\n") 
+        file.write(f"{usernameinput.get()}\n")  
         file.write(f"{versioncombobox.get()}\n") 
         file.write(f"{maxRamSlide.get()}\n") 
         file.write(f"{seeInstalledVersionsVar.get()}\n") 
@@ -74,7 +75,7 @@ def playmc(version, directory, user, xmx, isModpack = False):
                 break
             else : 
                 return
-        
+    
     if not isModpack :
         installedVersionList = [version['id'] for version in minecraft_launcher_lib.utils.get_installed_versions(directory)]
         if version in installedVersionList:
@@ -82,12 +83,7 @@ def playmc(version, directory, user, xmx, isModpack = False):
         else:
             print(f'Minecraft {version} not installed, downloading now')
             minecraft_launcher_lib.install.install_minecraft_version(version, directory)
-    elif isModpack :
-        installedVersionList = [version['id'] for version in minecraft_launcher_lib.utils.get_installed_versions(directory)]
-        if not version in installedVersionList:
-            tkinter.messagebox.showerror(title = 'Modpack is not installed', message = 'Modpack is not installed, please install first.')
-            return
-        
+
     def run_minecraft():
         options = {
             'username': user,  # Default username
@@ -98,18 +94,19 @@ def playmc(version, directory, user, xmx, isModpack = False):
                             '-Dminecraft.api.account.host=https://nope.invalid',
                             '-Dminecraft.api.session.host=https://nope.invalid',
                             '-Dminecraft.api.services.host=https://nope.invalid'],
+            'executablePath' : java
         }
-
-        
         # Launch Minecraft
-        
         subprocess.run(minecraft_launcher_lib.command.get_minecraft_command(version, directory, options), cwd=directory)
     
     # Run the run_minecraft function in a separate thread
     thread = Thread(target=run_minecraft)
     thread.start()
 
-
+def installFabric():
+    fabric = modpackFolder + "\\fabric.jar"
+    subprocess.run(f'{java} -jar {fabric} client -dir {modpackFolder} -noprofile -downloadMinecraft')
+    minecraft_launcher_lib.fabric.install_fabric(vanillaModpackVersion, modpackFolder, fabricVersion, java=java)
 def installForge():
     forge = modpackFolder + "\\forge.jar"
     subprocess.run(f'{java} -jar {forge} --installClient {modpackFolder}')
@@ -118,32 +115,38 @@ def installNeoForge():
     subprocess.run(f'{java} -jar {neoforge} --installClient {modpackFolder}')
 
 def modpackdownload(popupmodpack) :
-    if os.path.exists(modpackFolder):
-        shutil.rmtree(modpackFolder)
-        os.makedirs(modpackFolder)
-    else :
-        os.makedirs(modpackFolder)
-    urllib.request.urlretrieve(modpackurl, modpackFile)
-    with zipfile.ZipFile(modpackFile, 'r') as zip_ref: # Extract all the contents 
-        zip_ref.extractall(modpackFolder)
-    minecraft_launcher_lib.install.install_minecraft_version(vanillaModpackVersion, modpackFolder)
-    if  modLoader == 'Fabric' :
-        minecraft_launcher_lib.fabric.install_fabric(vanillaModpackVersion, modpackFolder, fabricVersion)
-    elif modLoader == 'Forge' :
-        installForge()
-    elif modLoader == 'NeoForge' :
-        installNeoForge()
-    else :
-        print("Error", f"An rror occurred during installation: Modloader not found")
-    popupmodpack.destroy()  # Close the popup after the download starts    
+    try :
+        if os.path.exists(modpackFolder):
+            shutil.rmtree(modpackFolder)
+            os.makedirs(modpackFolder)
+        else :
+            os.makedirs(modpackFolder)
+        urllib.request.urlretrieve(modpackurl, modpackFile)
+        with zipfile.ZipFile(modpackFile, 'r') as zip_ref: # Extract all the contents 
+            zip_ref.extractall(modpackFolder)
+        minecraft_launcher_lib.install.install_minecraft_version(vanillaModpackVersion, modpackFolder)
+        if  modLoader == 'Fabric' :
+            installFabric()
+        elif modLoader == 'Forge' :
+            installForge()
+        elif modLoader == 'NeoForge' :
+            installNeoForge()
+        else :
+            print("Error", f"An rror occurred during installation: Modloader not found")
+    except FileNotFoundError as e: 
+        tkinter.messagebox.showerror(title = 'Error', message = f"File not found: {e}")
+    except Exception as e: 
+        tkinter.messagebox.showerror(title = 'Error', message = f"An error occurred: {e}")
+    popupmodpack.destroy()
+
     
 
 def modpackdownloadpopup():   
     popupmodpack = tkinter.Toplevel()
     popupmodpack.title("Download Modpack")
-    popupmodpack.geometry('300x150')
+    popupmodpack.geometry('300x100')
     popupmodpack.resizable(1,1)
-    popupmodpacklabel = tkinter.Label(popupmodpack, text="This will make a fresh install of the modpack \ndeleting previous files, \ncontinue anyway?")
+    popupmodpacklabel = tkinter.Label(popupmodpack, text="You Sure?")
     popupmodpacklabel.pack(pady=10)
     
     button_frame = tk.Frame(popupmodpack) 
@@ -196,13 +199,13 @@ buttonsFrame = ttk.Frame(root)
 buttonsFrame.pack(pady=10)
 ModpackInstallButton =tk.Button(buttonsFrame, text="Modpack Install", command=lambda:modpackdownloadpopup())
 ModpackInstallButton.pack(side='left', padx=10)
-ModpackPlayButton =tk.Button(buttonsFrame, text="Modpack Play", command=lambda:playmc(modpackVersion, modpackFolder, usernameinput.get(), maxRamSlide.get(), True))
+ModpackPlayButton =tk.Button(buttonsFrame, text="Modpack Play", command=lambda:playmc(modpackVersion, modpackFolder, usernameinput.get(), maxRamSlide.get()))
 ModpackPlayButton.pack(side='left', padx=10)
-playbutton = tkinter.Button(buttonsFrame, text="Play", command=lambda:playmc(versioncombobox.get(), vanillaFolder, usernameinput.get(), maxRamSlide.get()))
+playbutton = tkinter.Button(buttonsFrame, text="Play", command=lambda:playmc(versioncombobox.get(), vanillaFolder, usernameinput.get(), maxRamSlide.get(), True))
 playbutton.pack(side='left', padx=10)
+
 
 root.protocol("WM_DELETE_WINDOW", lambda: (save_settings(), root.destroy()))
 load_settings()
 update_versions()
-
 root.mainloop()
