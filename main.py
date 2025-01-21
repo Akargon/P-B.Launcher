@@ -66,23 +66,55 @@ def load_settings():
             versioncombobox.set(lines[1].strip())
             maxRamSlide.set(lines[2].strip())
             seeInstalledVersionsVar.set(lines[3].strip())
-            
+
+def install_minecraft(version, directory):
+    playbutton.config(state=tkinter.DISABLED)
+    progressWindow = tkinter.Toplevel()
+    progressWindow.title("Downloading minecraft")
+    progressWindow.geometry('300x130')
+    progressWindow.resizable(0,0)
+
+    progress = ttk.Progressbar(progressWindow, orient='horizontal', length=200, mode='determinate')
+    progress.pack(pady=10)
+    progress['value'] = 0
+
+    string_var = tkinter.StringVar()
+    string_var.set("Downloading Minecraft")
+    text = tkinter.Label(progressWindow, textvariable=string_var)
+    text.pack(pady=10)
+
+    progressWindow.update_idletasks()
+
+    callback = {
+        "setStatus": lambda text: printText(text),
+        "setProgress": lambda value: printProgressBar(value),
+    }
+    
+    def printProgressBar(value):
+        progress['value'] = value
+        progressWindow.update_idletasks()
+    def printText(text):
+        string_var.set(text)
+        progressWindow.update_idletasks()
+    def install():
+        minecraft_launcher_lib.install.install_minecraft_version(version, directory, callback)
+        progressWindow.destroy()
+        playbutton.config(state=tkinter.NORMAL)
+    thread = threading.Thread(target=install)
+    thread.start()
+
 def playmc(version, directory, user, xmx, isModpack = False):
     # Check if Minecraft is already running
-    for proc in psutil.process_iter(['pid', 'name']):
-        if 'java' in proc.info['name']:
-            if tkinter.messagebox.askyesnocancel(title = 'Minecraft is already running', message = 'Do you wish to continue anyway?') : 
-                break
-            else : 
+    for thread in threading.enumerate():
+        if thread.name == 'Minecraft':
+            if not tkinter.messagebox.askyesno(title = 'Minecraft is already running', message = 'Do you wish to continue anyway?') : 
                 return
     
     if not isModpack :
         installedVersionList = [version['id'] for version in minecraft_launcher_lib.utils.get_installed_versions(directory)]
-        if version in installedVersionList:
-            print(f'Running Minecraft {version}')
-        else:
-            print(f'Minecraft {version} not installed, downloading now')
-            minecraft_launcher_lib.install.install_minecraft_version(version, directory)
+        if not version in installedVersionList:
+            install_minecraft(version, directory)
+            return
     elif isModpack :
         installedVersionList = [version['id'] for version in minecraft_launcher_lib.utils.get_installed_versions(directory)]
         if not version in installedVersionList:
@@ -105,7 +137,7 @@ def playmc(version, directory, user, xmx, isModpack = False):
         subprocess.run(minecraft_launcher_lib.command.get_minecraft_command(version, directory, options), cwd=directory)
     
     # Run the run_minecraft function in a separate thread
-    thread = threading.Thread(target=run_minecraft)
+    thread = threading.Thread(target=run_minecraft, name='Minecraft')
     thread.start()
 
 def modpackdownload(popupmodpack):
@@ -115,14 +147,17 @@ def modpackdownload(popupmodpack):
     progressWindows = tkinter.Toplevel()
     progressWindows.title("Download Modpack")
     progressWindows.geometry('300x130')
+    progressWindows.resizable(0,0)    
+
     progress = ttk.Progressbar(progressWindows, orient='horizontal', length=200, mode='determinate')
     progress.pack(pady=10)
+    progress['value'] = 0
+
     progress2 = ttk.Progressbar(progressWindows, orient='horizontal', length=200, mode='determinate')
     progress2.pack(pady=10)
-    progress['value'] = 0
     progress2['value'] = 0
-    progressWindows.update_idletasks()
 
+    progressWindows.update_idletasks()
 
     def installFabric():
         fabric = modpackFolder + "\\fabric.jar"
@@ -230,7 +265,7 @@ def update_versions(*args):
         versioncombobox.set(latest_version)
 
 root = tkinter.Tk()
-root.title("PibeLauncher")
+root.title("P-B.Launcher")
 root.geometry('500x200')
 root.resizable(1,1)
 
