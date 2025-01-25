@@ -10,19 +10,6 @@ import os, shutil, sys
 import zipfile
 import psutil
 
-class Limiter(ttk.Scale):
-    """ ttk.Scale sublass that limits the precision of values. """
-
-    def __init__(self, *args, **kwargs):
-        self.precision = kwargs.pop('precision')  # Remove non-std kwarg.
-        self.chain = kwargs.pop('command', lambda *a: None)  # Save if present.
-        super(Limiter, self).__init__(*args, command=self._value_changed, **kwargs)
-
-    def _value_changed(self, newvalue):
-        newvalue = round(float(newvalue), self.precision)
-        self.winfo_toplevel().globalsetvar(self.cget('variable'), (newvalue))
-        self.chain(newvalue)  # Call user specified function.
-
 # Function to handle resource paths
 def resource_path(relative_path):
     """ Get the absolute path to a resource, works for PyInstaller """
@@ -68,19 +55,24 @@ def save_settings():
     with open(settings_file, 'w') as file: 
         file.write(f"{usernameinput.get()}\n")  
         file.write(f"{versioncombobox.get()}\n") 
-        file.write(f"{maxRamSlide.get()}\n") 
+        file.write(f"{RamSlide.get()}\n") 
         file.write(f"{seeInstalledVersionsVar.get()}\n") 
 def load_settings(): 
+    update_versions()
     if os.path.exists(settings_file): 
         with open(settings_file, 'r') as file: 
             lines = file.readlines() 
             usernameinput.insert(0, lines[0].strip()) 
             versioncombobox.set(lines[1].strip())
-            maxRamSlide.set(lines[2].strip())
+            RamSlide.set(lines[2].strip())
             seeInstalledVersionsVar.set(lines[3].strip())
+    else :
+        usernameinput.insert(0, 'Player')
+        versioncombobox.set(latest_version)
+        RamSlide.set(4096)
 
 def install_minecraft(version, directory):
-    playbutton.config(state=tkinter.DISABLED)
+    playButton.config(state=tkinter.DISABLED)
     progressWindow = tkinter.Toplevel()
     progressWindow.title("Downloading minecraft")
     progressWindow.geometry('300x130')
@@ -111,7 +103,7 @@ def install_minecraft(version, directory):
     def install():
         minecraft_launcher_lib.install.install_minecraft_version(version, directory, callback)
         progressWindow.destroy()
-        playbutton.config(state=tkinter.NORMAL)
+        playButton.config(state=tkinter.NORMAL)
     thread = threading.Thread(target=install)
     thread.start()
 
@@ -154,7 +146,7 @@ def playmc(version, directory, user, xmx, isModpack = False):
 
 def modpackdownload(popupmodpack):
     popupmodpack.destroy()
-    ModpackInstallButton.config(state=tkinter.DISABLED)
+    ModpackUpdateButton.config(state=tkinter.DISABLED)
     # Create a progress bar window
     progressWindows = tkinter.Toplevel()
     progressWindows.title("Download Modpack")
@@ -168,6 +160,12 @@ def modpackdownload(popupmodpack):
     progress2 = ttk.Progressbar(progressWindows, orient='horizontal', length=200, mode='determinate')
     progress2.pack(pady=10)
     progress2['value'] = 0
+
+    string_var = tkinter.StringVar()
+    string_var.set("Downloading modpack")
+    text = ttk.Label(progressWindows, textvariable=string_var)
+    text.pack(pady=10)
+
 
     progressWindows.update_idletasks()
 
@@ -184,9 +182,11 @@ def modpackdownload(popupmodpack):
 
     def printProgressBar(value):
         progress2['value'] = value
-
+    def printText(text):
+        string_var.set(text)
 
     callback = {
+        "setStatus": lambda text: printText(text),
         "setProgress": lambda value: printProgressBar(value),
     }
 
@@ -199,34 +199,46 @@ def modpackdownload(popupmodpack):
 
     def download():
         try:
+            printText("Clearing modpack folder")
             if os.path.exists(modpackFolder):
-                shutil.rmtree(modpackFolder)
-                os.makedirs(modpackFolder)
+                for file in os.listdir(modpackFolder):
+                    file_path = os.path.join(modpackFolder, file)
+                    if not file == "saves" :
+                        try:
+                            if os.path.isfile(file_path):
+                                os.unlink(file_path)
+                            elif os.path.isdir(file_path):
+                                shutil.rmtree(file_path)
+                        except Exception as e:
+                            print(e)
             else:
                 os.makedirs(modpackFolder)
             
             # Update progress bar
             progress['value'] = 20
+            printText("Downloading modpack zip")
             progressWindows.update_idletasks()
 
             urllib.request.urlretrieve(modpackurl, modpackFile, reporthook=download_progress)
             
             # Update progress bar
             progress['value'] = 40
+            printText("Extracting modpack")
             progressWindows.update_idletasks()
-
+            
             with zipfile.ZipFile(modpackFile, 'r') as zip_ref: # Extract all the contents 
                 zip_ref.extractall(modpackFolder)
             
             # Update progress bar
             progress['value'] = 60
+            printText("Downloading Minecraft")
             progressWindows.update_idletasks()
-
             
             minecraft_launcher_lib.install.install_minecraft_version(vanillaModpackVersion, modpackFolder, callback=callback)
             
             # Update progress bar
             progress['value'] = 80
+            printText("Installing Modloader")
             progressWindows.update_idletasks()
 
             if modLoader == 'Fabric':
@@ -240,6 +252,7 @@ def modpackdownload(popupmodpack):
             
             # Update progress bar
             progress['value'] = 100
+            printText("Done")
             progressWindows.update_idletasks()
 
         except FileNotFoundError as e:
@@ -247,7 +260,7 @@ def modpackdownload(popupmodpack):
         except Exception as e:
             tkinter.messagebox.showerror(title='Error', message=f"An error occurred: {e}")
         finally:
-            ModpackInstallButton.config(state=tkinter.NORMAL)
+            ModpackUpdateButton.config(state=tkinter.NORMAL)
             update_versions()
             progressWindows.destroy()
 
@@ -271,16 +284,25 @@ def modpackdownloadpopup():
     download_button.pack(side='left', padx=10)
 
 def update_versions(*args): 
+    actualVersion = versioncombobox.get()
     if seeInstalledVersionsVar.get(): 
         installedVersionList = [version['id'] for version in minecraft_launcher_lib.utils.get_installed_versions(vanillaFolder)] 
         if os.path.exists(modpackFolder):
             installedVersionList.insert(0, 'Modpack')
-            versioncombobox['values'] = installedVersionList 
+        versioncombobox['values'] = installedVersionList 
+        if not actualVersion in installedVersionList: 
+            versioncombobox.set(installedVersionList[0])
     else: 
         versionList = [version['id'] for version in minecraft_launcher_lib.utils.get_version_list() if version['type'] == "release"]
-        versionList.insert(0, 'Modpack')
+        if os.path.exists(modpackFolder):
+            versionList.insert(0, 'Modpack')
         versioncombobox['values'] = versionList 
-        versioncombobox.set(latest_version)
+
+def playCommand() : 
+    if versioncombobox.get() == 'Modpack':
+        playmc(modpackVersion, modpackFolder, usernameinput.get(), ramint, True)
+    else:
+        playmc(versioncombobox.get(), vanillaFolder, usernameinput.get(), ramint)
 
 root = ThemedTk(theme="adapta", themebg=True)
 root.title("P-B.Launcher")
@@ -303,8 +325,7 @@ seeInstalledVersions = ttk.Checkbutton(frame, text='Installed Versions', variabl
 seeInstalledVersions.pack(side='right', padx=10)
 seeInstalledVersionsVar.trace_add('write', update_versions)
 
-versioncombobox = ttk.Combobox(frame,state="readonly", height=10, width=17)
-versioncombobox.set(latest_version)
+versioncombobox = ttk.Combobox(frame,state="readonly", height=5, width=10)
 versioncombobox.pack(side='right', padx=10)
 #version_label = ttk.Label(frame, text="Version:")
 #version_label.pack(side='right', padx=10)
@@ -318,21 +339,20 @@ ramFrame = ttk.Frame(root)
 ramFrame.pack(pady=10)
 ramLabel = ttk.Label(ramFrame, text="Ram:")
 ramLabel.pack(padx=10,side='left')
-maxRamSlide = Limiter(ramFrame, from_=2024, to=availableRAM / (1024 ** 2), orient='horizontal', length=200, command=update_ramLabel, precision=0)
-maxRamSlide.pack(padx=10, side='left')
+RamSlide = ttk.Scale(ramFrame, from_=2024, to=availableRAM / (1024 ** 2), orient='horizontal', length=200, command=update_ramLabel)
+RamSlide.pack(padx=10, side='left')
 ramValue = ttk.Label(ramFrame, text=f"2024 MB")
 ramValue.pack(padx=10,side='left')
 
 buttonsFrame = ttk.Frame(root)
 buttonsFrame.pack(pady=10)
-ModpackInstallButton =ttk.Button(buttonsFrame, text="Update modpack", command=lambda:modpackdownloadpopup())
-ModpackInstallButton.pack(side='left', padx=10)
-ModpackPlayButton =ttk.Button(buttonsFrame, text="Modpack Play", command=lambda:playmc(modpackVersion, modpackFolder, usernameinput.get(), maxRamSlide.get, True))
-ModpackPlayButton.pack(side='left', padx=10)
-playbutton = ttk.Button(buttonsFrame, text="Play", command=lambda:playmc(versioncombobox.get(), vanillaFolder, usernameinput.get(), ramint))
-playbutton.pack(side='left', padx=10)
+ModpackUpdateButton =ttk.Button(buttonsFrame, text="Update modpack", command=lambda:modpackdownloadpopup())
+ModpackUpdateButton.pack(side='left', padx=10)
+#ModpackPlayButton =ttk.Button(buttonsFrame, text="Modpack Play", command=lambda:playmc(modpackVersion, modpackFolder, usernameinput.get(), RamSlide.get, True))
+#ModpackPlayButton.pack(side='left', padx=10)
+playButton = ttk.Button(buttonsFrame, text="Play", command=lambda:playCommand())
+playButton.pack(side='left', padx=10)
 
 root.protocol("WM_DELETE_WINDOW", lambda: (save_settings(), root.destroy()))
 load_settings()
-update_versions()
 root.mainloop()
