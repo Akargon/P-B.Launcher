@@ -5,10 +5,13 @@ import tkinter.messagebox
 import minecraft_launcher_lib
 import subprocess
 import threading
-import urllib.request
+import requests
 import os, shutil, sys
 import zipfile
 import psutil
+import wget
+import uuid
+from urllib.request import urlretrieve
 
 # Function to handle resource paths
 def resource_path(relative_path):
@@ -40,7 +43,9 @@ java = minecraft_launcher_lib.runtime.get_executable_path('java-runtime-delta', 
 if not os.path.exists(launcherFolder):
     os.makedirs(launcherFolder)
 variablesurl = "https://www.dropbox.com/scl/fi/xw9igl5r3x3vkm8ihfzog/variables.txt?rlkey=c7yfxyvojnlgmekyv12mlakip&dl=1"
-urllib.request.urlretrieve(variablesurl, variables_file)
+if os.path.exists(variables_file):
+    os.remove(variables_file) # if exist, remove it directly
+urlretrieve(variablesurl, variables_file)
 with open(variables_file) as file:
     lines = file.readlines()
     modpackurl = lines[0].strip()
@@ -109,11 +114,17 @@ def install_minecraft(version, directory):
 
 def playmc(version, directory, user, xmx, isModpack = False):
     # Check if Minecraft is already running
-    for thread in threading.enumerate():
-        if thread.name == 'Minecraft':
-            if not tkinter.messagebox.askyesno(title = 'Minecraft is already running', message = 'Do you wish to continue anyway?') : 
+    # for thread in threading.enumerate():
+    #     if thread.name == 'Minecraft':
+    #         if not tkinter.messagebox.askyesno(title = 'Minecraft is already running', message = 'Do you wish to continue anyway?') : 
+    #             return
+    for proc in psutil.process_iter(['pid', 'name']):
+        if 'java' in proc.info['name']:
+            if tkinter.messagebox.askyesno(title = 'Minecraft is already running', message = 'Do you wish to continue anyway?') : 
+                break
+            else:
                 return
-    
+
     if not isModpack :
         installedVersionList = [version['id'] for version in minecraft_launcher_lib.utils.get_installed_versions(directory)]
         if not version in installedVersionList:
@@ -122,14 +133,14 @@ def playmc(version, directory, user, xmx, isModpack = False):
     elif isModpack :
         installedVersionList = [version['id'] for version in minecraft_launcher_lib.utils.get_installed_versions(directory)]
         if not version in installedVersionList:
-            tkinter.messagebox.showerror(title = 'Modpack is not installed', message = 'Modpack is not installed, please install first.')
+            tkinter.messagebox.showerror(title = 'Modpack not installed', message = 'Modpack is not installed, please install first.')
             return
         
     def run_minecraft():
         options = {
-            'username': user,  # Default username
-            'uuid': 'offline-uuid',  # Placeholder UUID
-            'token': 'offline-token',  # Placeholder token
+            'username': user,
+            'uuid': str(uuid.uuid4()),
+            'token': '',
             'jvmArguments': [f'-Xmx{xmx}m',  # Ram max memory
                             '-Dminecraft.api.auth.host=https://nope.invalid',
                             '-Dminecraft.api.account.host=https://nope.invalid',
@@ -138,7 +149,9 @@ def playmc(version, directory, user, xmx, isModpack = False):
             'executablePath' : java
         }
         # Launch Minecraft
-        subprocess.run(minecraft_launcher_lib.command.get_minecraft_command(version, directory, options), cwd=directory)
+        command = minecraft_launcher_lib.command.get_minecraft_command(version, directory, options)
+        subprocess.Popen(command, cwd=directory, creationflags=subprocess.CREATE_NO_WINDOW)
+
     
     # Run the run_minecraft function in a separate thread
     thread = threading.Thread(target=run_minecraft, name='Minecraft')
@@ -148,26 +161,26 @@ def modpackdownload(popupmodpack):
     popupmodpack.destroy()
     ModpackUpdateButton.config(state=tkinter.DISABLED)
     # Create a progress bar window
-    progressWindows = tkinter.Toplevel()
-    progressWindows.title("Download Modpack")
-    progressWindows.geometry('300x130')
-    progressWindows.resizable(0,0)    
+    progressWindow = tkinter.Toplevel()
+    progressWindow.title("Download Modpack")
+    progressWindow.geometry('300x130')
+    progressWindow.resizable(0,0)    
 
-    progress = ttk.Progressbar(progressWindows, orient='horizontal', length=200, mode='determinate')
+    progress = ttk.Progressbar(progressWindow, orient='horizontal', length=200, mode='determinate')
     progress.pack(pady=10)
     progress['value'] = 0
 
-    progress2 = ttk.Progressbar(progressWindows, orient='horizontal', length=200, mode='determinate')
+    progress2 = ttk.Progressbar(progressWindow, orient='horizontal', length=200, mode='determinate')
     progress2.pack(pady=10)
     progress2['value'] = 0
 
     string_var = tkinter.StringVar()
     string_var.set("Downloading modpack")
-    text = ttk.Label(progressWindows, textvariable=string_var)
+    text = ttk.Label(progressWindow, textvariable=string_var)
     text.pack(pady=10)
 
 
-    progressWindows.update_idletasks()
+    progressWindow.update_idletasks()
 
     def installFabric():
         fabric = modpackFolder + "\\fabric.jar"
@@ -190,13 +203,54 @@ def modpackdownload(popupmodpack):
         "setProgress": lambda value: printProgressBar(value),
     }
 
-    def download_progress(block_num, block_size, total_size):
-        downloaded = block_num * block_size
-        if total_size > 0:
-            percent = downloaded / total_size * 100
-            progress2['value'] = percent
-            progressWindows.update_idletasks()
+    def show_progress(block_num, block_size, total_size):
+        progress2['value'] = block_num * block_size / total_size *100
+        progressWindow.update_idletasks()
 
+    def update():
+        try:
+            printText("Clearing modpack folder")
+            if os.path.exists(modpackFolder):
+                for file in os.listdir(modpackFolder):
+                    file_path = os.path.join(modpackFolder, file)
+                    if file == "mods" or file == "config":
+                        try:
+                            if os.path.isfile(file_path):
+                                os.unlink(file_path)
+                            elif os.path.isdir(file_path):
+                                shutil.rmtree(file_path)
+                        except Exception as e:
+                            print(e)
+            
+            # Update progress bar
+            progress['value'] = 33
+            printText("Downloading update")
+            progressWindow.update_idletasks()
+
+            urlretrieve(modpackurl, modpackFile, show_progress)
+
+            # Update progress bar
+            progress['value'] = 66
+            printText("Extracting update")
+            progressWindow.update_idletasks()
+            
+            with zipfile.ZipFile(modpackFile, 'r') as zip_ref: # Extract all the contents 
+                zip_ref.extractall(modpackFolder)
+            
+            # Update progress bar
+            progress['value'] = 100
+            printText("Done")
+            progressWindow.update_idletasks()
+
+        except FileNotFoundError as e:
+            tkinter.messagebox.showerror(title='Error', message=f"File not found: {e}")
+        except Exception as e:
+            tkinter.messagebox.showerror(title='Error', message=f"An error occurred: {e}")
+        finally:
+            ModpackUpdateButton.config(state=tkinter.NORMAL)
+            update_versions()
+            progressWindow.destroy()
+            
     def download():
         try:
             printText("Clearing modpack folder")
@@ -217,14 +271,14 @@ def modpackdownload(popupmodpack):
             # Update progress bar
             progress['value'] = 20
             printText("Downloading modpack zip")
-            progressWindows.update_idletasks()
+            progressWindow.update_idletasks()
 
-            urllib.request.urlretrieve(modpackurl, modpackFile, reporthook=download_progress)
-            
+            urlretrieve(modpackurl, modpackFile, show_progress)
+
             # Update progress bar
             progress['value'] = 40
             printText("Extracting modpack")
-            progressWindows.update_idletasks()
+            progressWindow.update_idletasks()
             
             with zipfile.ZipFile(modpackFile, 'r') as zip_ref: # Extract all the contents 
                 zip_ref.extractall(modpackFolder)
@@ -232,14 +286,14 @@ def modpackdownload(popupmodpack):
             # Update progress bar
             progress['value'] = 60
             printText("Downloading Minecraft")
-            progressWindows.update_idletasks()
+            progressWindow.update_idletasks()
             
             minecraft_launcher_lib.install.install_minecraft_version(vanillaModpackVersion, modpackFolder, callback=callback)
             
             # Update progress bar
             progress['value'] = 80
             printText("Installing Modloader")
-            progressWindows.update_idletasks()
+            progressWindow.update_idletasks()
 
             if modLoader == 'Fabric':
                 installFabric()
@@ -253,7 +307,7 @@ def modpackdownload(popupmodpack):
             # Update progress bar
             progress['value'] = 100
             printText("Done")
-            progressWindows.update_idletasks()
+            progressWindow.update_idletasks()
 
         except FileNotFoundError as e:
             tkinter.messagebox.showerror(title='Error', message=f"File not found: {e}")
@@ -262,11 +316,16 @@ def modpackdownload(popupmodpack):
         finally:
             ModpackUpdateButton.config(state=tkinter.NORMAL)
             update_versions()
-            progressWindows.destroy()
+            progressWindow.destroy()
 
+    if modpackVersion in [version['id'] for version in minecraft_launcher_lib.utils.get_installed_versions(modpackFolder)]:
+        thread = threading.Thread(target=update)
+        thread.start()
+    else:
+        thread = threading.Thread(target=download)
+        thread.start()
     # Run the download function in a separate thread
-    thread = threading.Thread(target=download)
-    thread.start()
+    
     
 def modpackdownloadpopup():   
     popupmodpack = ThemedTk(toplevel=True, theme="adapta", themebg=True)
@@ -327,8 +386,6 @@ seeInstalledVersionsVar.trace_add('write', update_versions)
 
 versioncombobox = ttk.Combobox(frame,state="readonly", height=5, width=10)
 versioncombobox.pack(side='right', padx=10)
-#version_label = ttk.Label(frame, text="Version:")
-#version_label.pack(side='right', padx=10)
 
 def update_ramLabel(value): 
     global ramint
@@ -348,8 +405,6 @@ buttonsFrame = ttk.Frame(root)
 buttonsFrame.pack(pady=10)
 ModpackUpdateButton =ttk.Button(buttonsFrame, text="Update modpack", command=lambda:modpackdownloadpopup())
 ModpackUpdateButton.pack(side='left', padx=10)
-#ModpackPlayButton =ttk.Button(buttonsFrame, text="Modpack Play", command=lambda:playmc(modpackVersion, modpackFolder, usernameinput.get(), RamSlide.get, True))
-#ModpackPlayButton.pack(side='left', padx=10)
 playButton = ttk.Button(buttonsFrame, text="Play", command=lambda:playCommand())
 playButton.pack(side='left', padx=10)
 
